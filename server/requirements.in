@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pydantic
+websockets
+bcrypt
+pytest
+httpx
+PyJWT

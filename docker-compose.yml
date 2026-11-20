@@ -1,0 +1,41 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/app
+      - ./server/src:/app/src
+      - ./server/tests:/app/tests
+      - ./server/pytest.ini:/app/pytest.ini
+      - ./common:/app/common
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - ./server/.env
+
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    volumes:
+      - ./bot/src:/app/src
+      - ./common:/app/common
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - server
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    ports:
+      - "5173:5173"  # Expone la interfaz gráfica a tu navegador local
+    volumes:
+      - ./client:/app
+      - /app/node_modules  # Truco crítico: protege los módulos de Node internos del contenedor
+    depends_on:
+      - server

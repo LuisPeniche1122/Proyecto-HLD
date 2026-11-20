@@ -1,0 +1,21 @@
+cosas para hacer de ultimo:
+
+-investigar el uso de nginx o cloudflare para un firewall y certificado usando let´s encrypt
+-implementar noip
+-cambiar el link del cliente al link del dominio de noip y del servidor igual
+
+-cambiar el link de recuperación de contraseña que genera al servidor para que esté acorde cuando se ponga en linea
+-crear un email service con Google o con Outlook
+
+-realizar todo para el port forward en el modem hacia la ip del host del servidor.
+
+-en el caso de uso de devolver la lista de salas hay que eliminar el user_id ya que no es necesario para mostrar en la pantalla de las listas
+
+-cuando le doy a recargar me saca de la sala por lo que si soy el único dentro pues la borra
+-cambiar todas las excepciones para que envíen un código y el mensaje para poder usarlo en el front
+
+
+agregar caso de uso de ceder rol de host
+
+
+cambiar el room config a un room config dto

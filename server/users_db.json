@@ -1,0 +1,16 @@
+[
+    {
+        "id": "4282ab48-187e-4d59-aca5-4d0b0991c77b",
+        "username": "omar",
+        "email": "argel_01234@hotmail.com",
+        "password_hash": "$2b$12$g4lh6gSms9/st6p/oA.ed.6a1cU3QLwuwdUWibQT0cV.KtH.wENGG",
+        "created_at": "2026-05-29T08:23:17.764731+00:00"
+    },
+    {
+        "id": "39320a5e-8d6e-496c-a963-ba3f02e3c096",
+        "username": "uwu",
+        "email": "miguelomar.s@hotmail.com",
+        "password_hash": "$2b$12$tO2qLaqqv.3ffDv9ChreQO6KAQJ3rdmTO120fROE2IKrRI.c5GKIi",
+        "created_at": "2026-06-02T21:52:51.997477+00:00"
+    }
+]

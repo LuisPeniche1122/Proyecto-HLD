@@ -1,0 +1,10 @@
+from enum import Enum
+
+class CharacterType(Enum):
+    STEGOSAURUS = "STEGOSAURUS"
+    TRICERATOPS = "TRICERATOPS"
+    BRACHIOSAURUS = "BRACHIOSAURUS"
+    TYRANNOSAURUS = "TYRANNOSAURUS"
+    PTERODACTYL = "PTERODACTYL"      # Personaje 5
+    VELOCIRAPTOR = "VELOCIRAPTOR"    # Personaje 6
+    RANDOM = "RANDOM"

@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@keyframes fillBar {
+    from { width: 0%; }
+    to { width: 100%; }
+}
+
+.loading-bar-animated {
+    height: 100%;
+    background-color: #4CAF50; /* Tu primaryColor */
+    animation: fillBar 2.5s ease-in-out forwards;
+}
+
+/* Definimos el movimiento del rebote */
+@keyframes bounce {
+    0%, 100% { 
+        transform: translateY(0); /* Empieza y termina en el suelo */
+    }
+    50% { 
+        transform: translateY(-20px); /* A la mitad del tiempo, sube 20 píxeles */
+    }
+}
+
+/* Creamos una clase para aplicarla fácilmente */
+.dino-bounce {
+    display: inline-block; /* Obligatorio: si no es un bloque, el 'transform' no moverá el emoji */
+    animation: bounce 1s ease infinite;
+}
