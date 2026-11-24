@@ -1,15 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { useMatchStore, selectTimeLeft, selectGamePhase } from '../../hooks/match_store';
 
 interface GameTimerProps {
-    serverTimeLeft: number;
-    currentPhase: string;
     className?: string; // Para inyectar estilos de posicionamiento (absolute, flex, etc.)
 }
 
-export const GameTimer: React.FC<GameTimerProps> = ({ serverTimeLeft, currentPhase, className = "" }) => {
+export const GameTimer: React.FC<GameTimerProps> = ({ className = "" }) => {
+    // Dos primitivos a la vez → useShallow evita re-renders si ninguno cambió.
+    const { serverTimeLeft, currentPhase } = useMatchStore(
+        useShallow((s) => ({
+            serverTimeLeft: selectTimeLeft(s),
+            currentPhase: selectGamePhase(s),
+        }))
+    );
+
     const [timeLeft, setTimeLeft] = useState(serverTimeLeft);
     const localEndTimeRef = useRef<number | null>(null);
-    const phaseRef = useRef<string>(currentPhase);
+    const phaseRef = useRef<string | null>(currentPhase);
 
     useEffect(() => {
         if (currentPhase !== phaseRef.current || !localEndTimeRef.current) {

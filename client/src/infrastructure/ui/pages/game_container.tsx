@@ -50,7 +50,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({ gameState }) => {
     switch (stage) {
         // 1. FASE DE PREPARACIÓN (Pantalla completa distinta)
         case 'CHARACTER_SELECTION':
-            return <CharacterSelectionPage gameState={gameState} />;
+            return <CharacterSelectionPage/>;
 
         // 2. FASES DE MESA (Todas estas dibujan la misma TablePage)
         case 'TABLE':

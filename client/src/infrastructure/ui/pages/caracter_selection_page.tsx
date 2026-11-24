@@ -1,18 +1,16 @@
 import React from 'react';
-import type { Character, GameStateDTO } from '../../../domain/dtos/game_dtos';
+import type { Character } from '../../../domain/dtos/game_dtos';
 import { useSelectCharacter } from '../hooks/use_select_character';
 import { getDisasterIcon } from '../dicts/icons_dict';
 import { getCharacterAssets } from '../dicts/characters_dict'
 import { GameTimer } from '../components/game_components/GameTimer'; // <-- Importamos el Reloj
+import { useMatchStore, selectAvailableCharacters, selectSelections } from '../hooks/match_store';
 
-interface CharacterSelectionPageProps {
-    gameState: GameStateDTO;
-}
-
-export const CharacterSelectionPage: React.FC<CharacterSelectionPageProps> = ({ gameState }) => {
+export const CharacterSelectionPage: React.FC = () => {
     const localUserId = sessionStorage.getItem("user_id") || "";
 
-    const { available_characters, selections } = gameState;
+    const available_characters = useMatchStore(selectAvailableCharacters);
+    const selections = useMatchStore(selectSelections);
     const mySelectedCharacterType = selections[localUserId];
 
     const { selectCharacter } = useSelectCharacter();
@@ -32,8 +30,6 @@ export const CharacterSelectionPage: React.FC<CharacterSelectionPageProps> = ({ 
             
             {/* EL RELOJ FLOTANTE */}
             <GameTimer 
-                serverTimeLeft={gameState.time_left} 
-                currentPhase={gameState.game_phase} 
                 className="absolute top-4 left-4 z-50 scale-75 md:scale-100 origin-top-left" 
             />
 
