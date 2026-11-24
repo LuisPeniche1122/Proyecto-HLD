@@ -1,16 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { DeckPile } from './DeckPile';
 import { Card } from './Card';
 import { motion } from 'framer-motion';
+import { useMatchStore, selectActiveDisaster } from '../../hooks/match_store';
+import { getCardAssets } from '../../dicts/cards_dict';
 import back_desastres from '../../../../assets/cards/disasters/dorso_desastres.png';
 import back_tools from '../../../../assets/cards/tools/dorso_herramientas.png';
 
 interface CenterTableZoneProps {
-    toolsCount: number;
-    disastersCount: number;
-    discardCount: number;
-    topDiscardCard?: any;
-    activeDisaster?: any;
     cellWidth: number;
     cellHeight: number;
 }
@@ -32,9 +29,17 @@ const getAuraGradient = (type: string) => {
     }
 };
 
-export const CenterTableZone: React.FC<CenterTableZoneProps> = ({
-    toolsCount, disastersCount, discardCount, topDiscardCard, activeDisaster, cellWidth, cellHeight
-}) => {
+export const CenterTableZone: React.FC<CenterTableZoneProps> = ({ cellWidth, cellHeight }) => {
+    // ---- Lectura del store ----
+    const rawActiveDisaster = useMatchStore(selectActiveDisaster);
+    const activeDisaster = useMemo(
+        () => (rawActiveDisaster
+            ? { ...rawActiveDisaster, ...getCardAssets(rawActiveDisaster.id) }
+            : null),
+        [rawActiveDisaster]
+    );
+
+    // ---- Estado puramente visual (no se toca) ----
     const [isDisasterHovered, setIsDisasterHovered] = useState(false);
     const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -70,11 +75,11 @@ export const CenterTableZone: React.FC<CenterTableZoneProps> = ({
     return (
         <div className="flex flex-row items-center justify-center gap-3 w-full h-full relative">
             <div className="flex items-center justify-center">
-                <DeckPile type="DRAW" count={disastersCount} label="Desastres" orientation='vertical' cardHeight={cardH} backImage={DORSO_DESASTRES}/>
+                <DeckPile pile="DISASTERS" label="Desastres" orientation='vertical' cardHeight={cardH} backImage={DORSO_DESASTRES}/>
             </div>
             
             <div className="flex items-center justify-center">
-                <DeckPile type="DRAW" count={toolsCount} label="Herramientas" orientation='vertical' cardHeight={cardH} backImage={DORSO_TOOLS}/>
+                <DeckPile pile="TOOLS" label="Herramientas" orientation='vertical' cardHeight={cardH} backImage={DORSO_TOOLS}/>
             </div>
             
             <div style={{ width: cardW, height: cardH }} className="relative flex items-center justify-center">
@@ -122,7 +127,7 @@ export const CenterTableZone: React.FC<CenterTableZoneProps> = ({
             </div>
             
             <div className="flex items-center justify-center">
-                <DeckPile type="DISCARD" count={discardCount} topCard={topDiscardCard} label="Descartes" orientation='vertical'cardHeight={cardH} />
+                <DeckPile pile="DISCARD" label="Descartes" orientation='vertical' cardHeight={cardH} />
             </div>
         </div>
     );

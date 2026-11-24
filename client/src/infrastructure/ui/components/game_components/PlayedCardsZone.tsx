@@ -1,20 +1,42 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card } from './Card';
 import { usePlayMainCard } from '../../hooks/use_play_main_card'
+import { useMatchStore, selectPlayerById, selectGamePhase } from '../../hooks/match_store';
+import { getCardAssets } from '../../dicts/cards_dict';
 
 interface PlayedCardsZoneProps {
-    mainCard: any | null;
-    isMainCardRevealed: boolean;
-    sacrificedCards: any[];
-    instantCards: any[];
+    userId: string;
     isLocalPlayer?: boolean;
     cardWidth: number;
     cardHeight: number;
 }
 
+// Fases en las que la carta principal sigue oculta para los rivales.
+const HIDDEN_MAIN_CARD_PHASES: readonly string[] = ["PLAY_POINT_CARDS", "PLAY_SUDDEN_DEATH_CARDS", "BEGIN_ROUND"];
+
+// Constante de módulo: evita crear `[]` dentro del selector (bucle de renders en Zustand 5).
+// Solo lectura: no la mutes.
+const EMPTY_CARDS: any[] = [];
+
+const hydrateCard = (card: any) => ({ ...card, ...getCardAssets(card.id) });
+
 export const PlayedCardsZone: React.FC<PlayedCardsZoneProps> = ({ 
-    mainCard, isMainCardRevealed, sacrificedCards, instantCards, cardWidth, cardHeight, isLocalPlayer
+    userId, cardWidth, cardHeight, isLocalPlayer
 }) => {
+    // ---- Lectura del store (un selector por dato) ----
+    const rawMainCard = useMatchStore((s) => selectPlayerById(userId)(s)?.played_card ?? null);
+    const rawSacrificed = useMatchStore((s) => selectPlayerById(userId)(s)?.sacrifice_zone ?? EMPTY_CARDS);
+    const rawInstant = useMatchStore((s) => selectPlayerById(userId)(s)?.instant_zone ?? EMPTY_CARDS);
+    // Primitivo booleano: solo re-renderiza cuando cambia el resultado, no en cada fase.
+    const isMainCardRevealed = useMatchStore(
+        (s) => !HIDDEN_MAIN_CARD_PHASES.includes(selectGamePhase(s) ?? '')
+    );
+
+    // Hidratación de imágenes (las referencias del store son estables, así que el memo es efectivo).
+    const mainCard = useMemo(() => (rawMainCard ? hydrateCard(rawMainCard) : null), [rawMainCard]);
+    const sacrificedCards = useMemo(() => rawSacrificed.map(hydrateCard), [rawSacrificed]);
+    const instantCards = useMemo(() => rawInstant.map(hydrateCard), [rawInstant]);
+
     // Las cartas laterales son un 20% más pequeñas para darle protagonismo a la central
     const sideCardWidth = Math.floor(cardWidth * 0.8);
     const sideCardHeight = Math.floor(cardHeight * 0.8);

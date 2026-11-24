@@ -1,24 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { PlayerScoreBadge } from '../game_components/PlayerScoreBadge';
+import { useMatchStore, selectPlayers } from '../../hooks/match_store';
 
-// 1. RESTAURAMOS LA INTERFAZ: 
-// (Asegúrate de que coincida con lo que tu componente PlayerScoreBadge espera leer. 
-// Si tu DTO usa 'user_id', puedes cambiar 'id' por 'user_id' aquí y en el key del map).
-export interface PlayerScore {
-    user_id: string; // o user_id, dependiendo de cómo lo mapeaste en TablePage
-    username: string;
-    victory_points: number;
-    avatarUrl?: string;
-    markerImageUrl?: string;
-}
-
+// Los jugadores ya no llegan por props: se leen del store.
+// Solo conservamos el identificador del jugador local.
 interface ScoreboardProps {
-    players: PlayerScore[];
-    localUserId: string; // <-- NUEVO: Recibimos el ID del jugador local
+    localUserId: string;
     className?: string;
 }
 
-export const Scoreboard: React.FC<ScoreboardProps> = ({ players, localUserId, className = '' }) => {
+export const Scoreboard: React.FC<ScoreboardProps> = ({ localUserId, className = '' }) => {
+    const players = useMatchStore(selectPlayers);
+
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
@@ -43,21 +36,27 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({ players, localUserId, cl
         return Math.floor(availableHeight / MAX_PLAYERS);
     }, [containerSize.height]);
 
-    // 2. FILTRAMOS Y ORDENAMOS:
-    // Quitamos al jugador local de la lista antes de ordenar por puntuación
-    const sortedPlayers = [...players]
-        .filter(player => player.user_id !== localUserId) // Si usas user_id, cámbialo a player.user_id
-        .sort((a, b) => b.victory_points - a.victory_points);
+    // Quitamos al jugador local y ordenamos por puntuación.
+    // `filter` crea una copia, así que el sort no muta el array del store.
+    // Cada badge lee sus propios datos por userId.
+    const sortedPlayerIds = useMemo(
+        () => players
+            .filter(player => player.user_id !== localUserId)
+            .sort((a, b) => b.victory_points - a.victory_points)
+            .slice(0, MAX_PLAYERS)
+            .map(player => player.user_id),
+        [players, localUserId]
+    );
 
     return (
         <div 
             ref={containerRef} 
             className={`w-full h-full flex flex-col justify-start items-stretch gap-[8px] min-w-0 ${className}`}
         >
-            {badgeHeight > 0 && containerSize.width > 0 && sortedPlayers.slice(0, MAX_PLAYERS).map((player) => (
+            {badgeHeight > 0 && containerSize.width > 0 && sortedPlayerIds.map((userId) => (
                 <PlayerScoreBadge 
-                    key={player.user_id} // Si usas user_id, cámbialo a player.user_id
-                    player={player}
+                    key={userId}
+                    userId={userId}
                     calculatedHeight={badgeHeight}
                     containerWidth={containerSize.width} // Pasamos el ancho máximo disponible
                 />

@@ -1,21 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useShallow } from 'zustand/react/shallow';
 
-export interface PlayerScore {
-    username: string;
-    avatarUrl?: string; // Opcional como fallback
-    markerImageUrl?: string; // NUEVO: Para inyectar el Meeple
-    victory_points: number;
-}
+import { useMatchStore, selectPlayerById } from '../../hooks/match_store';
+import { getCharacterAssets } from '../../dicts/characters_dict';
 
 interface PlayerScoreBadgeProps {
-    player: PlayerScore;
+    userId: string;
     calculatedHeight: number;
     containerWidth: number; 
 }
 
-export const PlayerScoreBadge: React.FC<PlayerScoreBadgeProps> = ({ player, calculatedHeight, containerWidth }) => {
+export const PlayerScoreBadge: React.FC<PlayerScoreBadgeProps> = ({ userId, calculatedHeight, containerWidth }) => {
     const [isHovered, setIsHovered] = useState(false);
+
+    // Varios campos primitivos (+ la referencia estable de character) → useShallow
+    const { username, victoryPoints, character } = useMatchStore(
+        useShallow((s) => {
+            const p = selectPlayerById(userId)(s);
+            return {
+                username: p?.username ?? '',
+                victoryPoints: p?.victory_points ?? 0,
+                character: p?.character ?? null,
+            };
+        })
+    );
+
+    const assets = useMemo(
+        () => (character ? getCharacterAssets(character) : null),
+        [character]
+    );
+    const markerImageUrl = assets?.meeple;
+    const avatarUrl = assets?.dinoCircle;
 
     const innerPadding = 4;
     const avatarSize = calculatedHeight - (innerPadding * 2);
@@ -34,13 +50,13 @@ export const PlayerScoreBadge: React.FC<PlayerScoreBadgeProps> = ({ player, calc
             {/* AVATAR / MEEPLE */}
             <div 
                 // Si hay meeple, le quitamos el bg-[#111] y el rounded-full para que la imagen "respire"
-                className={`shrink-0 relative z-10 flex items-center justify-center ${player.markerImageUrl ? '' : 'rounded-full overflow-hidden bg-[#111]'}`}
+                className={`shrink-0 relative z-10 flex items-center justify-center ${markerImageUrl ? '' : 'rounded-full overflow-hidden bg-[#111]'}`}
                 style={{ width: `${avatarSize}px`, height: `${avatarSize}px` }}
             >
-                {player.markerImageUrl ? (
-                    <img src={player.markerImageUrl} alt={`${player.username} meeple`} className="w-full h-full object-contain drop-shadow-md" />
+                {markerImageUrl ? (
+                    <img src={markerImageUrl} alt={`${username} meeple`} className="w-full h-full object-contain drop-shadow-md" />
                 ) : (
-                    <img src={player.avatarUrl} alt={`${player.username} avatar`} className="w-full h-full object-cover" />
+                    <img src={avatarUrl} alt={`${username} avatar`} className="w-full h-full object-cover" />
                 )}
             </div>
 
@@ -54,7 +70,7 @@ export const PlayerScoreBadge: React.FC<PlayerScoreBadgeProps> = ({ player, calc
                         transition={{ duration: 0.15, ease: "easeOut" }}
                         className="absolute right-full mr-3 px-3 py-1.5 bg-[#eee] text-[#111] text-sm font-bold rounded-lg shadow-xl whitespace-nowrap z-[100]"
                     >
-                        {player.username}
+                        {username}
                         <div className="absolute top-1/2 -translate-y-1/2 -right-2 border-[5px] border-transparent border-l-[#eee]" />
                     </motion.div>
                 )}
@@ -66,7 +82,7 @@ export const PlayerScoreBadge: React.FC<PlayerScoreBadgeProps> = ({ player, calc
             {/* PUNTUACIÓN */}
             <div className="text-right shrink-0 pr-2 overflow-hidden">
                 <span className="text-[#FFD700] font-bold text-base whitespace-nowrap">
-                    {player.victory_points} 
+                    {victoryPoints} 
                     <span className="text-xs text-[#aaa] font-normal ml-1 hidden sm:inline">pts</span>
                 </span>
             </div>

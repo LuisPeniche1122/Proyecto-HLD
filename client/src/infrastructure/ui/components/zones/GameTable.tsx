@@ -1,41 +1,41 @@
 import React, { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { CenterTableZone } from '../game_components/CenterTableZone';
 import { PlayerSeat } from '../game_components/PlayerSeat';
 import { GameTimer } from '../game_components/GameTimer';
+import { useMatchStore, selectPlayers, selectGamePhase } from '../../hooks/match_store';
 
 interface GameTableProps {
-    players: any[];
     localUserId: string;
     tableWidth: number;
     tableHeight: number;
-    activeDisaster?: any;
-    toolsCount: number;
-    disastersCount: number;
-    discardCount: number;
-    topDiscardCard?: any;
-    serverTimeLeft: number;
-    currentPhase: string;
-    showTimer: boolean;
 }
 
+// Fases en las que se muestra el reloj sobre la mesa.
+const PHASES_WITH_TIMER: readonly string[] = ["PLAY_POINT_CARDS", "PLAY_INSTANT_CARDS"];
+
 export const GameTable: React.FC<GameTableProps> = ({ 
-    players, localUserId, tableWidth, tableHeight, 
-    activeDisaster, toolsCount, disastersCount, discardCount, topDiscardCard,
-    serverTimeLeft, currentPhase, showTimer
+    localUserId, tableWidth, tableHeight
 }) => {
+    // ---- Lectura del store ----
+    // Solo necesitamos los ids: con useShallow la mesa no re-renderiza cuando cambia
+    // el puntaje, la mano, etc. de un jugador (cada PlayerSeat lee lo suyo).
+    const playerIds = useMatchStore(
+        useShallow((s) => selectPlayers(s).map((p) => p.user_id))
+    );
+    // Booleano primitivo derivado de la fase.
+    const showTimer = useMatchStore((s) => PHASES_WITH_TIMER.includes(selectGamePhase(s) ?? ''));
 
-    const seatedPlayers = useMemo(() => {
-        const localIndex = players.findIndex(p => p.user_id === localUserId);
-        if (localIndex === -1) return players;
+    const seatedIds = useMemo(() => {
+        const localIndex = playerIds.indexOf(localUserId);
+        if (localIndex === -1) return playerIds;
         return [
-            ...players.slice(localIndex),
-            ...players.slice(0, localIndex)
+            ...playerIds.slice(localIndex),
+            ...playerIds.slice(0, localIndex)
         ];
-    }, [players, localUserId]);
+    }, [playerIds, localUserId]);
 
-    const numPlayers = seatedPlayers.length;
-
-    const isMainCardRevealed = !["PLAY_POINT_CARDS", "PLAY_SUDDEN_DEATH_CARDS", "BEGIN_ROUND"].includes(currentPhase);
+    const numPlayers = seatedIds.length;
 
     const getSeatClasses = (index: number) => {
         if (index === 0) return { gridArea: 'col-start-2 row-start-3', pos: 'bottom' };
@@ -78,37 +78,26 @@ export const GameTable: React.FC<GameTableProps> = ({
                 
                 {/* ZONA CENTRAL DE LA MESA */}
                 <div className="col-start-2 row-start-2 flex items-center justify-center min-w-0 min-h-0">
-                    <CenterTableZone 
-                        toolsCount={toolsCount} disastersCount={disastersCount} discardCount={discardCount} 
-                        activeDisaster={activeDisaster} topDiscardCard={topDiscardCard}
-                        cellWidth={cellWidth} cellHeight={cellHeight}
-                    />
+                    <CenterTableZone cellWidth={cellWidth} cellHeight={cellHeight} />
                 </div>
 
                 {/* EL RELOJ DE LA PARTIDA (Columna 3, Fila 2) */}
                 {showTimer && (
                     <GameTimer 
-                        serverTimeLeft={serverTimeLeft} 
-                        currentPhase={currentPhase} 
                         className="col-start-3 row-start-2 flex items-center justify-center min-w-0 min-h-0" 
                     />
                 )}
 
                 {/* LOS JUGADORES */}
-                {seatedPlayers.map((player, index) => {
+                {seatedIds.map((userId, index) => {
                     const { gridArea, pos } = getSeatClasses(index);
-                    const isLocalPlayer = player.user_id === localUserId;
 
                     return (
-                        <div key={player.user_id} className={`${gridArea} flex items-center justify-center min-w-0 min-h-0`}>
+                        <div key={userId} className={`${gridArea} flex items-center justify-center min-w-0 min-h-0`}>
                             <PlayerSeat 
-                                player={player} 
-                                isLocalPlayer={isLocalPlayer} // <-- Y se lo pasamos al asiento
+                                userId={userId}
+                                isLocalPlayer={userId === localUserId}
                                 position={pos as 'top' | 'bottom' | 'middle'}
-                                mainCard={player.played_card || null}
-                                isMainCardRevealed={isMainCardRevealed} 
-                                sacrificedCards={player.sacrifice_zone || []}
-                                instantCards={player.instant_zone || []}
                                 cellWidth={cellWidth}   
                                 cellHeight={cellHeight} 
                             />

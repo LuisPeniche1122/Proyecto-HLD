@@ -56,7 +56,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({ gameState }) => {
         case 'TABLE':
             // La TablePage NUNCA se desmonta entre estas fases, 
             // solo reacciona a los cambios internos de gameState
-            return <TablePage gameState={gameState} />;
+            return <TablePage/>;
 
         // 3. FASE FINAL (Pantalla completa distinta)
         case 'GAME_OVER':

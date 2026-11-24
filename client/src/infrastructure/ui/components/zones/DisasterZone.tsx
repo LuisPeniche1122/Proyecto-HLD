@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, Reorder } from 'framer-motion';
 
-// Simplificamos las props: ahora solo necesita las cartas y sus dimensiones.
+import { useMatchStore, selectPlayerById } from '../../hooks/match_store';
+import { getCardAssets } from '../../dicts/cards_dict';
+
+// Las cartas ya no llegan por props: se leen del store a partir del userId.
 interface DisasterZoneProps {
-    cards: any[];
+    userId: string;
     renderCard: (card: any, index: number, motionProps: any, isInspected: boolean) => React.ReactNode;
     cardWidth: number;
     cardHeight: number; 
@@ -20,13 +23,25 @@ const DISASTER_ORDER = [
 ];
 
 export const DisasterZone: React.FC<DisasterZoneProps> = ({
-    cards, 
+    userId,
     renderCard,
     cardWidth,
     cardHeight,
     maxSpacing = 0, // Por defecto 0: Se pegan lado a lado sin separarse de más
     className = ''
 }) => {
+    // Devuelve la referencia del array del store (o undefined): estable mientras no cambie.
+    const disasterZone = useMatchStore((s) => selectPlayerById(userId)(s)?.disaster_zone);
+
+    // Hidratación con assets (antes se hacía en TablePage)
+    const cards = useMemo(
+        () => (disasterZone ?? []).map(card => ({
+            ...card,
+            ...getCardAssets(card.id)
+        })),
+        [disasterZone]
+    );
+
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(0);
     const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);

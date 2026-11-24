@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { useShallow } from 'zustand/react/shallow';
+
+import { useMatchStore, selectPlayerById } from '../../hooks/match_store';
+import { getCharacterAssets } from '../../dicts/characters_dict';
 
 const PATH_COORDS = [
     { score: 0, r: 8, c: 0, label: 'START' },
@@ -23,13 +27,32 @@ const PATH_COORDS = [
 ];
 
 interface PlayerBoardProps {
-    currentPlayer: any; // Recibe directamente al jugador ya hidratado con sus assets
+    userId: string; // Los datos del jugador se leen del store
 }
 
-export const PlayerBoard: React.FC<PlayerBoardProps> = ({ currentPlayer }) => {
+export const PlayerBoard: React.FC<PlayerBoardProps> = ({ userId }) => {
+    const { username, victoryPoints, character } = useMatchStore(
+        useShallow((s) => {
+            const p = selectPlayerById(userId)(s);
+            return {
+                username: p?.username ?? '',
+                victoryPoints: p?.victory_points ?? 0,
+                character: p?.character ?? null,
+            };
+        })
+    );
+
+    // Hidratación de assets (antes venía hecha desde TablePage)
+    const assets = useMemo(
+        () => (character ? getCharacterAssets(character) : null),
+        [character]
+    );
+    const markerImageUrl = assets?.meeple;
+    const avatarUrl = assets?.dinoCircle;
+    const playerBoard = assets?.boardBackground;
     
     // EL TRUCO DE LA CAMINATA: Mantenemos un score "visual" que persigue al real
-    const targetScore = Math.max(0, Math.min(currentPlayer.victory_points, 50));
+    const targetScore = Math.max(0, Math.min(victoryPoints, 50));
     const [displayedScore, setDisplayedScore] = useState(targetScore);
 
     useEffect(() => {
@@ -80,7 +103,7 @@ export const PlayerBoard: React.FC<PlayerBoardProps> = ({ currentPlayer }) => {
             className="w-full h-full flex flex-row gap-4 p-2 rounded-lg border-2 border-[#444] bg-cover bg-left bg-no-repeat relative"
             style={{
                 // Inyectamos la imagen como fondo de TODO el componente
-                backgroundImage: currentPlayer.playerBoard ? `url(${currentPlayer.playerBoard})` : 'none',
+                backgroundImage: playerBoard ? `url(${playerBoard})` : 'none',
                 backgroundColor: '#111827' // Color de respaldo por si tarda en cargar
             }}
         >
@@ -124,15 +147,15 @@ export const PlayerBoard: React.FC<PlayerBoardProps> = ({ currentPlayer }) => {
                                         layoutId="current-player-marker"
                                         transition={{ type: "spring", stiffness: 500, damping: 30 }}
                                         className={`absolute z-50 flex items-center justify-center ${
-                                            currentPlayer.markerImageUrl 
+                                            markerImageUrl 
                                                 ? 'w-8 h-8 md:w-10 md:h-10' 
                                                 : 'w-5 h-5 md:w-7 md:h-7 rounded-full border-[3px] border-white shadow-xl overflow-hidden bg-[#111]'
                                         }`}
                                     >
-                                        {currentPlayer.markerImageUrl ? (
-                                            <img src={currentPlayer.markerImageUrl} alt="Marker" className="w-full h-full object-contain drop-shadow-md" />
+                                        {markerImageUrl ? (
+                                            <img src={markerImageUrl} alt="Marker" className="w-full h-full object-contain drop-shadow-md" />
                                         ) : (
-                                            <img src={currentPlayer.avatarUrl} alt={currentPlayer.username} className="w-full h-full object-cover" />
+                                            <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
                                         )}
                                     </motion.div>
                                 )}

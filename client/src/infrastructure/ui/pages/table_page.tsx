@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { GameStateDTO } from '../../../domain/dtos/game_dtos';
+import { useShallow } from 'zustand/react/shallow';
 import { Card } from '../components/game_components/Card';
 import { Hand } from '../components/zones/Hand';
 import { DisasterZone } from '../components/zones/DisasterZone';
@@ -9,8 +9,16 @@ import { GameTable } from '../components/zones/GameTable';
 
 import { usePlayMainCard } from '../hooks/use_play_main_card'
 
-// Importamos los diccionarios
-import { getCharacterAssets } from '../dicts/characters_dict'
+// Store de la partida (ajusta la ruta a donde viva match_store.ts)
+import {
+    useMatchStore,
+    selectPlayers,
+    selectPlayerById,
+    selectGamePhase,
+    selectTimeLeft,
+} from '../hooks/match_store';
+
+// Diccionario de cartas (la mano local sigue hidratándose aquí porque Hand recibe `cards` por props)
 import { getCardAssets } from '../dicts/cards_dict';
 
 const useContainerSize = (ref: React.RefObject<HTMLDivElement | null>) => {
@@ -27,11 +35,7 @@ const useContainerSize = (ref: React.RefObject<HTMLDivElement | null>) => {
     return size;
 };
 
-interface TablePageProps {
-    gameState: GameStateDTO;
-}
-
-export const TablePage: React.FC<TablePageProps> = ({ gameState }) => {
+export const TablePage: React.FC = () => {
     const handRef = useRef<HTMLDivElement>(null);
     const disasterRef = useRef<HTMLDivElement>(null);
     const scoreRef = useRef<HTMLDivElement>(null);
@@ -49,27 +53,42 @@ export const TablePage: React.FC<TablePageProps> = ({ gameState }) => {
     const localUserId = sessionStorage.getItem("user_id")
 
     // ==========================================
+    // LECTURA DEL STORE
+    // ==========================================
+    const { gamePhase, serverTimeLeft } = useMatchStore(
+        useShallow((s) => ({
+            gamePhase: selectGamePhase(s) ?? '',
+            serverTimeLeft: selectTimeLeft(s),
+        }))
+    );
+    // Primitivo: solo para el fallback del id local.
+    const firstPlayerId = useMatchStore((s) => selectPlayers(s)[0]?.user_id ?? '');
+
+    const safeLocalUserId = localUserId || firstPlayerId;
+    const localPlayer = useMatchStore(selectPlayerById(safeLocalUserId));
+
+    // ==========================================
     // 1. CRONÓMETRO ROBUSTO (Inmune a lag)
     // ==========================================
-    const [timeLeft, setTimeLeft] = useState(gameState.time_left);
+    const [timeLeft, setTimeLeft] = useState(serverTimeLeft);
     const localEndTimeRef = useRef<number | null>(null);
-    const currentPhaseRef = useRef<string>(gameState.game_phase);
+    const currentPhaseRef = useRef<string>(gamePhase);
 
     useEffect(() => {
-        if (gameState.game_phase !== currentPhaseRef.current || !localEndTimeRef.current) {
-            currentPhaseRef.current = gameState.game_phase;
+        if (gamePhase !== currentPhaseRef.current || !localEndTimeRef.current) {
+            currentPhaseRef.current = gamePhase;
             // Si el tiempo es infinito, no calculamos una fecha de fin
-            if (gameState.time_left === -1) {
+            if (serverTimeLeft === -1) {
                 localEndTimeRef.current = null;
                 setTimeLeft(-1);
             } else {
-                localEndTimeRef.current = Date.now() + (gameState.time_left * 1000);
+                localEndTimeRef.current = Date.now() + (serverTimeLeft * 1000);
             }
         }
 
         const updateTimer = () => {
             // Si el juego nos mandó tiempo infinito, ignoramos la resta matemática
-            if (gameState.time_left === -1) {
+            if (serverTimeLeft === -1) {
                 setTimeLeft(-1);
                 return;
             }
@@ -84,65 +103,28 @@ export const TablePage: React.FC<TablePageProps> = ({ gameState }) => {
         const timerId = setInterval(updateTimer, 1000);
 
         return () => clearInterval(timerId);
-    }, [gameState.game_phase, gameState.time_left]);
+    }, [gamePhase, serverTimeLeft]);
 
-    const PHASES_WITH_TIMER = ["PLAY_POINT_CARDS", "PLAY_INSTANT_CARDS"];
-    const shouldShowTimer = PHASES_WITH_TIMER.includes(gameState.game_phase);
-    const isShuffling = gameState.game_phase === "INITIAL_SHUFFLE";
+    const isShuffling = gamePhase === "INITIAL_SHUFFLE";
 
     // ==========================================
-    // 2. PROCESAMIENTO DE ESTADO GLOBAL
+    // 2. HIDRATACIÓN DE LA MANO LOCAL
     // ==========================================
-
-    const safeLocalUserId = localUserId || gameState.players[0]?.user_id;
-
-    const playersWithAssets = gameState.players.map(player => {
-        const assets = getCharacterAssets(player.character);
-        return {
-            ...player,
-            markerImageUrl: assets.meeple,
-            avatarUrl: assets.dinoCircle,
-            playerBoard: assets.boardBackground,
-            played_card: player.played_card ? {
-                ...player.played_card,
-                ...getCardAssets(player.played_card.id)
-            } : null
-        };
-    });
-
-    const localPlayerWithAssets = playersWithAssets.find(p => p.user_id === safeLocalUserId);
-    // ==========================================
-    // 3. HIDRATACIÓN DE CARTAS
-    // ==========================================
+    // (GameTable, PlayerSeat, PlayedCardsZone, CenterTableZone y DeckPile hidratan lo suyo
+    //  leyendo del store; DisasterZone también.)
 
     const [localHandCards, setLocalHandCards] = useState<any[]>([]);
 
     useEffect(() => {
-        if (localPlayerWithAssets) {
-            const hydratedHand = localPlayerWithAssets.hand.map(card => ({
+        if (localPlayer) {
+            const hydratedHand = localPlayer.hand.map(card => ({
                 ...card,
                 ...getCardAssets(card.id)
             }));
             setLocalHandCards(hydratedHand);
         }
-    }, [localPlayerWithAssets?.hand]);
+    }, [localPlayer?.hand]);
 
-    const hydratedDisasters = (localPlayerWithAssets?.disaster_zone || []).map(card => ({
-        ...card,
-        ...getCardAssets(card.id)
-    }));
-
-    const hydratedActiveDisaster = gameState.active_disaster ? {
-        ...gameState.active_disaster,
-        ...getCardAssets(gameState.active_disaster.id)
-    } : null;
-
-    const hydratedTopDiscard = gameState.top_discard_card ? {
-        ...gameState.top_discard_card,
-        ...getCardAssets(gameState.top_discard_card.id)
-    } : null;
-
-    const myMainCard = localPlayerWithAssets?.played_card?.id
     const { playMainCard } = usePlayMainCard();
     const handlePlayCard = (card_id: string) => {
         playMainCard(card_id);
@@ -151,10 +133,10 @@ export const TablePage: React.FC<TablePageProps> = ({ gameState }) => {
     const [isDisasterPhase, setIsDisasterPhase] = useState(true);
 
     // ==========================================
-    // 4. LÓGICA DE CARTAS HABILITADAS (BUSINESS RULES)
+    // 3. LÓGICA DE CARTAS HABILITADAS (BUSINESS RULES)
     // ==========================================
     const evaluateCardPlayability = (card: any): boolean => {
-        const phase = gameState.game_phase;
+        const phase = gamePhase;
         
         // Comprueba si es instantánea usando el type proveniente del servidor (CardDTO)
         const isInstant = card.type === "INSTANT";
@@ -191,18 +173,9 @@ export const TablePage: React.FC<TablePageProps> = ({ gameState }) => {
                 <div ref={tableRef} className="flex-[7] bg-[#1a472a] rounded-2xl border-[3px] border-[#2a5a3a] relative min-h-0">
                     {tableSize.width > 0 && (
                         <GameTable 
-                            players={playersWithAssets} 
                             localUserId={safeLocalUserId} 
                             tableWidth={tableSize.width} 
                             tableHeight={tableSize.height}
-                            activeDisaster={hydratedActiveDisaster}
-                            toolsCount={gameState.tools_count}
-                            disastersCount={gameState.disasters_count}
-                            discardCount={gameState.discard_count}
-                            topDiscardCard={hydratedTopDiscard}
-                            serverTimeLeft={gameState.time_left}
-                            currentPhase={gameState.game_phase}
-                            showTimer={shouldShowTimer && !isShuffling}
                         />
                     )}
                 </div>
@@ -246,7 +219,7 @@ export const TablePage: React.FC<TablePageProps> = ({ gameState }) => {
                         <div ref={disasterRef} className="w-full h-full">
                             {disasterSize.height > 0 && (
                                 <DisasterZone 
-                                    cards={hydratedDisasters} 
+                                    userId={safeLocalUserId}
                                     cardWidth={disasterCardWidth} 
                                     cardHeight={disasterCardHeight} 
                                     renderCard={(card, index, motionProps) => (
@@ -273,7 +246,7 @@ export const TablePage: React.FC<TablePageProps> = ({ gameState }) => {
                     <div className="flex-[4] bg-[#222] rounded-xl p-3 flex flex-col border border-[#333] min-h-0 min-w-0">
                         <h3 className="text-xs md:text-sm text-[#aaa] uppercase border-b border-[#444] pb-1 mb-2 shrink-0">Puntuación</h3>
                         <div ref={scoreRef} className="flex-1 w-full min-h-0">
-                            <Scoreboard players={playersWithAssets} localUserId={safeLocalUserId}/>
+                            <Scoreboard localUserId={safeLocalUserId}/>
                         </div>
                     </div>
                     <div className="flex-[6] flex flex-col gap-4 min-w-0 min-h-0">
@@ -290,10 +263,8 @@ export const TablePage: React.FC<TablePageProps> = ({ gameState }) => {
                 <div className="flex-[4] bg-[#222] rounded-xl p-3 flex flex-col border border-[#333] min-h-0 shrink-0">
                     <h3 className="text-xs md:text-sm text-[#aaa] uppercase border-b border-[#444] pb-1 mb-2 shrink-0">Tu tablero</h3>
                     <div className="flex-1 w-full min-h-0">
-                        {localPlayerWithAssets && (
-                            <PlayerBoard 
-                                currentPlayer={localPlayerWithAssets} 
-                            />
+                        {localPlayer && (
+                            <PlayerBoard userId={safeLocalUserId} />
                         )}
                     </div>
                 </div>

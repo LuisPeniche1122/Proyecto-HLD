@@ -1,22 +1,30 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { PlayedCardsZone } from './PlayedCardsZone';
+import { useMatchStore, selectPlayerById } from '../../hooks/match_store';
+import { getCharacterAssets } from '../../dicts/characters_dict';
 
 interface PlayerSeatProps {
-    player: any;
+    userId: string;
     isLocalPlayer?: boolean;
     position: 'top' | 'bottom' | 'middle';
-    mainCard: any | null;
-    isMainCardRevealed: boolean;
-    sacrificedCards: any[];
-    instantCards: any[];
     cellWidth: number;
     cellHeight: number;
 }
 
 export const PlayerSeat: React.FC<PlayerSeatProps> = ({ 
-    player, isLocalPlayer, position, mainCard, isMainCardRevealed, sacrificedCards, instantCards, cellWidth, cellHeight
+    userId, isLocalPlayer, position, cellWidth, cellHeight
 }) => {
-    
+    // ---- Lectura del store ----
+    const player = useMatchStore(selectPlayerById(userId));
+
+    // Avatar hidratado desde el diccionario de personajes.
+    const avatarUrl = useMemo(
+        () => (player ? getCharacterAssets(player.character).dinoCircle : undefined),
+        [player?.character]
+    );
+
+    if (!player) return null;
+
     // MATEMÁTICAS INDIVIDUALES
     // Ancho: Ocupamos máximo 1/2.8 del ancho de celda (así la carta del centro + flotantes entran bien)
     const maxW = cellWidth / 2.8; 
@@ -34,8 +42,8 @@ export const PlayerSeat: React.FC<PlayerSeatProps> = ({
     const UserInfo = () => (
         <div className={`flex flex-col items-center justify-center gap-1 shrink-0 ${isLocalPlayer ? 'scale-100' : 'scale-90'}`}>
             <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full border-2 shadow-lg flex items-center justify-center overflow-hidden ${isLocalPlayer ? 'border-green-500' : 'border-blue-400'}`}>
-                {player.avatarUrl ? (
-                    <img src={player.avatarUrl} alt="meeple" className="w-full h-full object-cover bg-gray-800" />
+                {avatarUrl ? (
+                    <img src={avatarUrl} alt="meeple" className="w-full h-full object-cover bg-gray-800" />
                 ) : (
                     <span className="text-sm">🦖</span>
                 )}
@@ -51,11 +59,8 @@ export const PlayerSeat: React.FC<PlayerSeatProps> = ({
             {position === 'top' && !isLocalPlayer && <UserInfo />}
             
             <PlayedCardsZone 
-                mainCard={mainCard} 
-                isMainCardRevealed={isMainCardRevealed} 
+                userId={userId}
                 isLocalPlayer={isLocalPlayer}
-                sacrificedCards={sacrificedCards} 
-                instantCards={instantCards} 
                 cardWidth={cardW}
                 cardHeight={cardH}
             />
