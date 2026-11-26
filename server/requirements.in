@@ -6,3 +6,4 @@ bcrypt
 pytest
 httpx
 PyJWT
+python-statemachine==2.5.0

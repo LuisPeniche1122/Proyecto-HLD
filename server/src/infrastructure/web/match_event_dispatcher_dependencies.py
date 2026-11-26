@@ -11,12 +11,14 @@ from src.domain.interfaces.character_store import CharacterStore
 from src.domain.interfaces.card_set_store import CardSetStore
 from src.infrastructure.controllers.match_event_dispatcher import MatchEventDispatcher
 from src.domain.services.game_flow_service import GameFlowService
+from src.domain.services.game_lifecycle_state_machine import GameLifecycleRegistry
 
 from src.infrastructure.web.core_dependencies import get_game_repository
 
 # 1. Singletons Globales (Para no borrar la RAM en cada petición)
 __character_store = StaticCharacterStore()
 __card_set_Store = StaticCardSetStore()
+__game_lifecycle_registry = GameLifecycleRegistry()
 
 # 2. Proveedores Base
 def get_character_store() -> CharacterStore:
@@ -34,8 +36,11 @@ def get_game_state_assembler(
 # 4. Servicios
 def get_game_flow_service(
     character_store: CharacterStore = Depends(get_character_store)  
-):
-    return GameFlowService(character_store=character_store)
+) -> GameFlowService:
+    return GameFlowService(
+        character_store=character_store,
+        lifecycle_registry=__game_lifecycle_registry
+    )
 
 # 4. Casos de Uso
 def get_select_character_use_case(

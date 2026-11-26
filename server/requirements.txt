@@ -50,6 +50,8 @@ pydantic==2.13.4
     #   fastapi
 pydantic-core==2.46.4
     # via pydantic
+python-statemachine==2.5.0
+    # via -r requirements.in
 pygments==2.20.0
     # via pytest
 pyjwt==2.13.0

@@ -1,4 +1,5 @@
 from typing import Optional
+from src.domain.entities.game import Game
 from src.domain.interfaces.game_repository import GameRepository
 from src.domain.assemblers.game_state_assembler import GameStateAssembler
 from src.domain.dtos.game_dtos import GameStateDTO
@@ -23,8 +24,11 @@ class TimeoutPhaseUseCase:
             print(f"   ❌ [ABORTADO] No se encontró el juego en la base de datos.")
             return None 
 
-        print(f"   👉 Fase real en la que está el juego ahora: '{game.phase.value}'")
+        with self.__game_flow_service.synchronize(game):
+            return self.__execute_locked(game, expected_phase)
 
+    def __execute_locked(self, game: Game, expected_phase: str) -> Optional[GameStateDTO]:
+        print(f"   👉 Fase real en la que está el juego ahora: '{game.phase.value}'")
         # 2. ¿El juego ya avanzó de fase gracias a un jugador manual?
         if game.phase.value != expected_phase:
             print(f"   🛑 [ABORTADO] Falsa alarma. El cronómetro es viejo. El juego ya avanzó manualmente.")

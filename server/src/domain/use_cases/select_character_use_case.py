@@ -21,22 +21,15 @@ class SelectCharacterUseCase:
         if not game:
             raise DomainException("Partida no encontrada.")
 
-        # 1. Parsear el input
-        raw_char = payload.get("character_type")
-        chosen_char = None if not raw_char else CharacterType(raw_char)
-        
-        # 2. La Entidad hace su trabajo (Validar y asignar)
-        game.select_character(user_id, chosen_char)
-        
-        # 3. EL DIRECTOR DE ORQUESTA EN ACCIÓN:
-        # Preguntamos a la entidad si ya todos eligieron
-        if game.are_all_characters_selected():
-            # Si sí, llamamos al Servicio de Dominio para que avance la fase
-            self.__game_flow_service.finalize_character_selection(game)
-            print(f"🎉 Todos eligieron. Avanzando a la fase {game.phase.value}")
-        
-        # 4. Guardar cambios en la DB
-        self.__game_repository.update(game)
+        with self.__game_flow_service.synchronize(game):
+            raw_char = payload.get("character_type")
+            chosen_char = None if not raw_char else CharacterType(raw_char)
 
-        # 5. Ensamblar respuesta
-        return self.__assembler.assemble(game)
+            game.select_character(user_id, chosen_char)
+
+            if game.are_all_characters_selected():
+                self.__game_flow_service.finalize_character_selection(game)
+                print(f"🎉 Todos eligieron. Avanzando a la fase {game.phase.value}")
+
+            self.__game_repository.update(game)
+            return self.__assembler.assemble(game)

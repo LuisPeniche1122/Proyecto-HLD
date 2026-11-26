@@ -1,5 +1,7 @@
 import random
-from typing import List, Dict
+from contextlib import contextmanager
+from functools import wraps
+from typing import List, Optional
 from src.domain.entities.game import Game
 from src.domain.value_objects.character import Character
 from src.domain.value_objects.card_set import CardSet
@@ -9,12 +11,38 @@ from src.domain.exceptions import DomainException
 from src.domain.value_objects.card import PointCard, DisasterCard
 from src.domain.interfaces.character_store import CharacterStore
 from src.domain.value_objects.card_type import CardType
+from src.domain.services.game_lifecycle_state_machine import GameLifecycleRegistry
+
+
+def synchronized_game_operation(method):
+    @wraps(method)
+    def wrapper(self, game: Game, *args, **kwargs):
+        with self.synchronize(game):
+            return method(self, game, *args, **kwargs)
+    return wrapper
+
 
 class GameFlowService:
     """Servicio de Dominio responsable de orquestar el flujo y las fases de un juego."""
-    def __init__(self, character_store : CharacterStore):
+    def __init__(
+        self,
+        character_store: CharacterStore,
+        lifecycle_registry: Optional[GameLifecycleRegistry] = None
+    ):
         self.__character_store = character_store
+        self.__lifecycle_registry = lifecycle_registry or GameLifecycleRegistry()
 
+    @contextmanager
+    def synchronize(self, game: Game):
+        with self.__lifecycle_registry.lock_for(game.room_code):
+            yield
+
+    def __transition_to_phase(self, game: Game, phase: GamePhase, time_left: int) -> None:
+        machine = self.__lifecycle_registry.machine_for(game)
+        machine.transition_to(game.phase, phase)
+        game.transition_to_phase(phase, time_left)
+
+    @synchronized_game_operation
     def setup_game(
         self, 
         game: Game, 
@@ -48,7 +76,9 @@ class GameFlowService:
 
         # 5. Iniciar Fase
         game.transition_to_phase(GamePhase.CHARACTER_SELECTION, time_left=30)
+        self.__lifecycle_registry.register(game)
 
+    @synchronized_game_operation
     def finalize_character_selection(self, game: Game) -> None:
         if game.phase != GamePhase.CHARACTER_SELECTION:
             return 
@@ -69,16 +99,18 @@ class GameFlowService:
                 else:
                     raise DomainException("No hay personajes disponibles.")
                     
-        game.transition_to_phase(GamePhase.INITIAL_SHUFFLE, time_left=4)
+        self.__transition_to_phase(game, GamePhase.INITIAL_SHUFFLE, time_left=4)
 
+    @synchronized_game_operation
     def start_initial_shuffle(self, game: Game) -> None:
         if game.phase != GamePhase.INITIAL_SHUFFLE:
             return
 
         game.shuffle_tools_deck()
         game.shuffle_disasters_deck()
-        game.transition_to_phase(GamePhase.BEGIN_ROUND, time_left=1)
+        self.__transition_to_phase(game, GamePhase.BEGIN_ROUND, time_left=1)
 
+    @synchronized_game_operation
     def begin_round(self, game: Game) -> None:
         if game.phase != GamePhase.BEGIN_ROUND:
             return
@@ -88,8 +120,9 @@ class GameFlowService:
         game.verify_instant_hands()
         
         # Leemos el tiempo dinámico de la configuración de esa partida
-        game.transition_to_phase(GamePhase.PLAY_POINT_CARDS, time_left=game.config.select_card_phase_timer)
+        self.__transition_to_phase(game, GamePhase.PLAY_POINT_CARDS, time_left=game.config.select_card_phase_timer)
 
+    @synchronized_game_operation
     def reveal_main_cards(self, game: Game) -> None:
         """
         Avanzamos a la fase de resolución de efectos.
@@ -112,9 +145,9 @@ class GameFlowService:
                     game.play_main_card(player.user_id, random_card.instance_id)
 
         # 2. Cambiamos de fase (esto dispara que el DTO deje de censurar las cartas)
-        game.transition_to_phase(GamePhase.CALCULATE_ROUND_SCORE, time_left=1)
+        self.__transition_to_phase(game, GamePhase.CALCULATE_ROUND_SCORE, time_left=1)
 
-
+    @synchronized_game_operation
     def calculate_round_scores(self, game: Game) -> None:
         """
         Calcula el puntaje final de la ronda para cada jugador y define a los ganadores y perdedores.
@@ -161,8 +194,9 @@ class GameFlowService:
         print("round loosers", round_losers)
 
         game.set_round_results(winners=round_winners, losers=round_losers)
-        game.transition_to_phase(GamePhase.RESOLVING_ROUND_WINNERS, time_left=1)
+        self.__transition_to_phase(game, GamePhase.RESOLVING_ROUND_WINNERS, time_left=1)
 
+    @synchronized_game_operation
     def resolve_round_winners(self, game: Game) -> None:
         """
         Fase: RESOLVING_ROUND_WINNERS
@@ -182,7 +216,7 @@ class GameFlowService:
             print("se ha devuelto el desastre al mazo de desastres")
             game.reset_round_data()
             print("se resetearon las zonas")
-            game.transition_to_phase(GamePhase.BEGIN_ROUND, time_left=1)
+            self.__transition_to_phase(game, GamePhase.BEGIN_ROUND, time_left=1)
             return
 
         # HAY GANADORES CLAROS
@@ -200,7 +234,7 @@ class GameFlowService:
                 game_over = True
 
         if game_over:
-            game.transition_to_phase(GamePhase.GAME_OVER, time_left=1)
+            self.__transition_to_phase(game, GamePhase.GAME_OVER, time_left=1)
             return
 
         # CASO C: EVALUAR PERDEDORES Y MUERTE SÚBITA
@@ -214,25 +248,26 @@ class GameFlowService:
                     print("se retira el desastre")
                     game.reset_round_data()
                     print("se resetean las zonas")
-                    game.transition_to_phase(GamePhase.BEGIN_ROUND, time_left=1)
+                    self.__transition_to_phase(game, GamePhase.BEGIN_ROUND, time_left=1)
                 else:
                     # Solo uno se quedó sin cartas, pierde por default.
                     print("solo uno se quedó sin cartas, lo ponemos como perdedor directo")
                     print(game.round_losers)
                     game.set_round_results(winners=game.round_winners, losers=out_of_cards)
                     print(game.round_losers)
-                    game.transition_to_phase(GamePhase.RESOLVING_ROUND_LOSERS, time_left=5)
+                    self.__transition_to_phase(game, GamePhase.RESOLVING_ROUND_LOSERS, time_left=5)
             else:
                 # Todos tienen cartas, iniciamos la selección de muerte súbita
                 print("varios perdieron y todos tienen cartas, amonos pa la muerte súbita")
                 game.set_sudden_death_players(game.round_losers)
                 game.reset_for_sudden_death()
-                game.transition_to_phase(GamePhase.PLAY_SUDDEN_DEATH_CARDS, time_left=game.config.select_card_phase_timer)
+                self.__transition_to_phase(game, GamePhase.PLAY_SUDDEN_DEATH_CARDS, time_left=game.config.select_card_phase_timer)
         else:
             # Solo un perdedor
             print("solo uno perdió, no problemo")
-            game.transition_to_phase(GamePhase.RESOLVING_ROUND_LOSERS, time_left=5)
+            self.__transition_to_phase(game, GamePhase.RESOLVING_ROUND_LOSERS, time_left=5)
 
+    @synchronized_game_operation
     def reveal_sudden_death_cards(self, game: Game) -> None:
         """
         [Llamado por el UseCase o el Timer]
@@ -249,9 +284,9 @@ class GameFlowService:
                     game.play_main_card(uid, random.choice(valid_cards).instance_id)
 
         # Transición a la fase de animación para que se vean las cartas (El DTO dejará de censurar)
-        game.transition_to_phase(GamePhase.RESOLVING_SUDDEN_DEATH, time_left=game.config.select_card_phase_timer)
+        self.__transition_to_phase(game, GamePhase.RESOLVING_SUDDEN_DEATH, time_left=game.config.select_card_phase_timer)
 
-
+    @synchronized_game_operation
     def resolve_sudden_death(self, game: Game) -> None:
         """
         [Llamado ÚNICAMENTE por el TimerManager cuando RESOLVING_SUDDEN_DEATH llega a 0]
@@ -282,7 +317,7 @@ class GameFlowService:
             # Perdedor definitivo
             game.set_round_results(winners=game.round_winners, losers=new_losers)
             game.set_sudden_death_players([]) 
-            game.transition_to_phase(GamePhase.RESOLVING_ROUND_LOSERS, time_left=5)
+            self.__transition_to_phase(game, GamePhase.RESOLVING_ROUND_LOSERS, time_left=5)
             
         else:
             # Siguen empatados. Verificamos si se quedaron sin cartas.
@@ -293,18 +328,19 @@ class GameFlowService:
                     # Todos se quedaron sin cartas. Se cancela la ronda.
                     game.return_active_disaster_to_deck()
                     game.reset_round_data()
-                    game.transition_to_phase(GamePhase.BEGIN_ROUND, time_left=1)
+                    self.__transition_to_phase(game, GamePhase.BEGIN_ROUND, time_left=1)
                 else:
                     # Uno se quedó sin cartas, pierde por default.
                     game.set_round_results(winners=game.round_winners, losers=players_out_of_cards)
                     game.set_sudden_death_players([])
-                    game.transition_to_phase(GamePhase.RESOLVING_ROUND_LOSERS, time_left=5)
+                    self.__transition_to_phase(game, GamePhase.RESOLVING_ROUND_LOSERS, time_left=5)
             else:
                 # OTRA ronda de selección de muerte súbita
                 game.set_sudden_death_players(new_losers)
                 game.reset_for_sudden_death()
-                game.transition_to_phase(GamePhase.PLAY_SUDDEN_DEATH_CARDS, time_left=game.config.select_card_phase_timer)
+                self.__transition_to_phase(game, GamePhase.PLAY_SUDDEN_DEATH_CARDS, time_left=game.config.select_card_phase_timer)
 
+    @synchronized_game_operation
     def resolve_round_losers(self, game: Game) -> None:
         """
         Fase: RESOLVING_ROUND_LOSERS
@@ -324,9 +360,9 @@ class GameFlowService:
                 game.eliminate_player(loser_id)
 
         # 3. Transición rápida a los puntos pasivos (El Frontend mostrará la animación del meteorito cayendo)
-        game.transition_to_phase(GamePhase.RESOLVING_VICTORY_POINTS, time_left=3)
+        self.__transition_to_phase(game, GamePhase.RESOLVING_VICTORY_POINTS, time_left=3)
 
-
+    @synchronized_game_operation
     def resolve_victory_points(self, game: Game) -> None:
         """
         Fase: RESOLVING_VICTORY_POINTS
@@ -362,8 +398,8 @@ class GameFlowService:
 
         # 4. DECIDIR EL DESTINO
         if game_over or len(alive_players) == 0:
-            game.transition_to_phase(GamePhase.GAME_OVER, time_left=1)
+            self.__transition_to_phase(game, GamePhase.GAME_OVER, time_left=1)
         else:
             # Nadie ha ganado. Limpiamos la basura de la mesa y robamos cartas nuevas.
             game.reset_round_data()
-            game.transition_to_phase(GamePhase.BEGIN_ROUND, time_left=1)
+            self.__transition_to_phase(game, GamePhase.BEGIN_ROUND, time_left=1)
